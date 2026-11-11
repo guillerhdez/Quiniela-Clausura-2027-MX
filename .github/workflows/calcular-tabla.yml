@@ -1,0 +1,39 @@
+name: Calcular tabla
+
+# Lo dispara el cron externo (cron-job.org) vía workflow_dispatch; el cron nativo de Actions es irregular.
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Solo calcular y mostrar resumen (no escribe en la base)'
+        type: boolean
+        default: false
+      forzar:
+        description: 'Recalcular aunque los resultados no hayan cambiado'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: calcular-tabla
+  cancel-in-progress: false
+
+jobs:
+  calcular:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Pruebas de lógica
+        run: npm test
+      - name: Calcular y publicar
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/calcular-tabla.js ${{ inputs.dry && '--dry' || '' }} ${{ inputs.forzar && '--forzar' || '' }}
