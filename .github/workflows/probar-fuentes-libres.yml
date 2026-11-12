@@ -1,0 +1,20 @@
+name: Probar fuentes libres de resultados
+
+# Solo lectura (ESPN y TheSportsDB). No usa secrets ni escribe en Firebase. Se lanza a mano.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Consultar ESPN y TheSportsDB
+        run: node scripts/probar-fuentes-libres.js
