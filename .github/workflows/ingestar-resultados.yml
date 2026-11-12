@@ -1,0 +1,35 @@
+name: Ingestar resultados
+
+# Lo dispara el cron externo (cron-job.org) vía workflow_dispatch. Publica solo si TheSportsDB y ESPN coinciden.
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Solo consultar y decidir (no escribe en la base)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingestar-resultados
+  cancel-in-progress: false
+
+jobs:
+  ingestar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Pruebas de lógica
+        run: npm test
+      - name: Ingerir resultados
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/ingestar-resultados.js ${{ inputs.dry && '--dry' || '' }}
