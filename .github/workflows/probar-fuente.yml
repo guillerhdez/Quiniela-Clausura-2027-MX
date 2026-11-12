@@ -1,0 +1,28 @@
+name: Probar fuente de resultados
+
+# Solo lectura contra API-Football; no escribe en Firebase. Se lanza a mano.
+on:
+  workflow_dispatch:
+    inputs:
+      season:
+        description: 'Temporada a consultar (opcional; por defecto la vigente y la anterior)'
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Consultar API-Football
+        env:
+          API_FOOTBALL_KEY: ${{ secrets.API_FOOTBALL_KEY }}
+          SEASON: ${{ inputs.season }}
+        run: node scripts/probar-fuente.js ${SEASON:+--season=$SEASON}
