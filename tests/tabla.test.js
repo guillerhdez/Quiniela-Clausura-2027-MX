@@ -114,15 +114,20 @@ test('huella: estable al orden de claves; cambia con resultados o con la Jornada
   assert.equal(h1, T.huellaEntradas(conKickoffDistinto, { p1: R(1, 0), p2: R(0, 0) })); // un cambio de horario no recalcula
 });
 
-test('planActualizacion: tabla+meta+Jornadas, versión +1 y borra Jornadas que dejaron de estar completas', () => {
-  const calculo = { tabla: { a: {} }, tablaJornada: { 2: { a: {} } }, jornadasCompletas: [2], jornada: 2 };
+test('planActualizacion: tabla+meta+Jornadas+Liguilla/final, versión +1 y borra Jornadas que dejaron de estar completas', () => {
+  const calculo = { tabla: { a: {} }, tablaJornada: { 2: { a: {} } }, tablaLiguilla: null, tablaFinal: null, jornadasCompletas: [2], jornada: 2, fases: { regular: false, liguilla: false, campeon: false } };
   const c = T.planActualizacion(calculo, { version: 4, publicadas: [1, 2] }, 'h');
-  assert.deepEqual(Object.keys(c).sort(), ['tabla', 'tablaJornada/1', 'tablaJornada/2', 'tablaMeta']);
+  assert.deepEqual(Object.keys(c).sort(), ['tabla', 'tablaJornada/1', 'tablaJornada/2', 'tablaJornada/final', 'tablaJornada/liguilla', 'tablaMeta']);
   assert.equal(c['tablaJornada/1'], null);
-  assert.deepEqual(c.tablaMeta, { jornada: 2, version: 5, huella: 'h', publicadas: [2] });
+  assert.equal(c['tablaJornada/liguilla'], null);   // null borra la ruta si ya no corresponde publicarla
+  assert.equal(c['tablaJornada/final'], null);
+  assert.deepEqual(c.tablaMeta, { jornada: 2, version: 5, huella: 'h', publicadas: [2], fases: { regular: false, liguilla: false, campeon: false } });
   const d = T.planActualizacion(calculo, { version: 1, publicadas: { 0: 2 } }, 'h');   // RTDB puede devolver objeto
   assert.equal(d['tablaJornada/1'], undefined);
   assert.equal(T.planActualizacion({ tabla: {}, tablaJornada: {}, jornadasCompletas: [], jornada: 0 }, null, 'h').tablaMeta.version, 1);
+  const e = T.planActualizacion(Object.assign({}, calculo, { tablaLiguilla: { a: { pos: 1 } }, tablaFinal: { a: { pos: 1 } } }), null, 'h');
+  assert.deepEqual(e['tablaJornada/liguilla'], { a: { pos: 1 } });
+  assert.deepEqual(e['tablaJornada/final'], { a: { pos: 1 } });
 });
 
 test('rendimiento: 5 000 usuarios y 153 partidos calculan en tiempo razonable', () => {
@@ -134,4 +139,88 @@ test('rendimiento: 5 000 usuarios y 153 partidos calculan en tiempo razonable', 
   assert.equal(Object.keys(r.tabla).length, 5000);
   assert.equal(r.jornadasCompletas.length, 17);
   assert.ok(Date.now() - t0 < 15000);
+});
+
+/* ---------- Fase D2: Liguilla y Campeón de Campeones ---------- */
+const L = (id, ronda) => [id, { local: 'Por definir', visitante: 'Por definir', kickoff: 1800000000000, fase: 'liguilla', ronda }];
+const partidosLig = Object.assign({}, partidos, Object.fromEntries([
+  L('q1', 'Cuartos de Final'), L('q2', 'Cuartos de Final'), L('s1', 'Semifinal'), L('f1', 'Final'), L('f2', 'Final')
+]));
+const OP = { jornadasRegulares: 2 }; // las pruebas usan 2 Jornadas regulares en vez de 17
+
+test('rondaDe / esRondaFinal: solo "Final" exacto; una Jornada válida manda sobre ronda', () => {
+  assert.equal(T.rondaDe({ ronda: ' Semifinal ' }), 'Semifinal');
+  assert.equal(T.rondaDe({ ronda: 'Final', jornada: 3 }), null);
+  assert.equal(T.rondaDe({ ronda: '' }), null);
+  assert.equal(T.rondaDe({}), null);
+  assert.equal(T.esRondaFinal('Final'), true);
+  assert.equal(T.esRondaFinal(' FINAL '), true);
+  assert.equal(T.esRondaFinal('Cuartos de Final'), false);
+  assert.equal(T.esRondaFinal('Semifinal'), false);
+  assert.equal(T.esRondaFinal(null), false);
+});
+
+test('fases: regular completa con Jornadas 1..N; la Liguilla termina solo con los 2 partidos de la Final con resultado', () => {
+  const base = { usuarios: u('a'), partidos: partidosLig, referidos: {}, predicciones: {} };
+  const reg = { p1: R(1, 0), p2: R(1, 0), p3: R(1, 0), p4: R(1, 0) };
+  let r = T.calcularTablas(Object.assign({ resultados: { p1: R(1, 0), p2: R(1, 0) } }, base), OP);
+  assert.deepEqual(r.fases, { regular: false, liguilla: false, campeon: false });
+  r = T.calcularTablas(Object.assign({ resultados: reg }, base), OP);
+  assert.deepEqual(r.fases, { regular: true, liguilla: false, campeon: false });
+  // Cuartos y Semifinal completos NO terminan la Liguilla ("Cuartos de Final" y "Semifinal" no son la Final)
+  r = T.calcularTablas(Object.assign({ resultados: Object.assign({ q1: R(1, 0), q2: R(0, 0), s1: R(2, 2) }, reg) }, base), OP);
+  assert.equal(r.fases.liguilla, false);
+  r = T.calcularTablas(Object.assign({ resultados: Object.assign({ f1: R(1, 0) }, reg) }, base), OP);
+  assert.equal(r.fases.liguilla, false);            // falta la vuelta de la Final
+  r = T.calcularTablas(Object.assign({ resultados: Object.assign({ f1: R(1, 0), f2: R(0, 0) }, reg) }, base), OP);
+  assert.deepEqual(r.fases, { regular: true, liguilla: true, campeon: true });
+  // Final lista pero fase regular incompleta: no hay campeón
+  r = T.calcularTablas(Object.assign({ resultados: { p1: R(1, 0), f1: R(1, 0), f2: R(0, 0) } }, base), OP);
+  assert.deepEqual(r.fases, { regular: false, liguilla: true, campeon: false });
+  // Sin partidos de Final cargados, la Liguilla no está completa
+  r = T.calcularTablas({ usuarios: u('a'), partidos, resultados: reg, predicciones: {}, referidos: {} }, OP);
+  assert.equal(r.fases.liguilla, false);
+});
+
+test('tablaLiguilla: solo partidos con ronda, aparece con el primer resultado y desempata con referidos', () => {
+  const base = { usuarios: u('a', 'b', 'inv'), partidos: partidosLig, referidos: { inv: { por: 'b' } },
+    predicciones: { a: { p1: R(1, 0), q1: R(2, 0) }, b: { q1: R(2, 0) }, inv: { q1: R(0, 0) } } };
+  let r = T.calcularTablas(Object.assign({ resultados: { p1: R(1, 0) } }, base), OP);
+  assert.equal(r.tablaLiguilla, null);              // sin resultados de Liguilla todavía
+  r = T.calcularTablas(Object.assign({ resultados: { p1: R(1, 0), q1: R(2, 0) } }, base), OP);
+  assert.equal(r.tablaLiguilla.a.pts, 3);           // el p1 de fase regular no cuenta aquí
+  assert.equal(r.tablaLiguilla.a.goles, 2);
+  assert.equal(r.tablaLiguilla.b.pts, 3);
+  assert.equal(r.tablaLiguilla.b.pos, 1);           // b y a empatan en puntos: b gana por su referido válido
+  assert.equal(r.tablaLiguilla.a.pos, 2);
+  assert.equal(r.tablaLiguilla.inv.pts, 0);
+  assert.equal(r.tabla.a.pts, 3);                   // la general sigue siendo solo fase regular
+  assert.equal(r.tablaFinal, null);                 // la fase regular no ha terminado
+});
+
+test('tablaFinal (Campeón de Campeones): fase regular + Liguilla, solo cuando la regular terminó', () => {
+  const reg = { p1: R(1, 0), p2: R(1, 0), p3: R(1, 0), p4: R(1, 0) };
+  const r = T.calcularTablas({
+    usuarios: u('a', 'b'), partidos: partidosLig, referidos: {},
+    resultados: Object.assign({ q1: R(3, 1) }, reg),
+    predicciones: {
+      a: { p1: R(1, 0), p2: R(1, 0), p3: R(1, 0), p4: R(1, 0), q1: R(0, 1) },   // general 12 pts, Liguilla 0
+      b: { p1: R(1, 0), q1: R(3, 1) }                                          // general 3 pts, Liguilla 3
+    }, }, OP);
+  assert.equal(r.tabla.a.pts, 12);
+  assert.equal(r.tablaLiguilla.b.pts, 3);
+  assert.equal(r.tablaLiguilla.a.pts, 0);
+  assert.equal(r.tablaFinal.a.pts, 12);
+  assert.equal(r.tablaFinal.b.pts, 6);
+  assert.equal(r.tablaFinal.b.goles, 1 + 4);        // goles atinados: p1 (1) + q1 (4)
+  assert.equal(r.tablaFinal.a.pos, 1);
+  assert.equal(r.tablaFinal.b.pos, 2);
+});
+
+test('huella: cambia si un partido pasa a ser de Liguilla o cambia de ronda', () => {
+  const h1 = T.huellaEntradas(partidosLig, { p1: R(1, 0) });
+  const otra = JSON.parse(JSON.stringify(partidosLig)); otra.q1.ronda = 'Semifinal';
+  assert.notEqual(h1, T.huellaEntradas(otra, { p1: R(1, 0) }));
+  const sin = JSON.parse(JSON.stringify(partidosLig)); delete sin.q1.ronda;
+  assert.notEqual(h1, T.huellaEntradas(sin, { p1: R(1, 0) }));
 });

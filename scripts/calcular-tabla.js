@@ -1,5 +1,5 @@
 'use strict';
-// Calcula tabla, tablaJornada/{j} y tablaMeta y los escribe en Firebase con la cuenta de servicio.
+// Calcula tabla, tablaJornada/{j}, tablaJornada/liguilla, tablaJornada/final y tablaMeta y los escribe en Firebase con la cuenta de servicio.
 // Uso: node scripts/calcular-tabla.js [--dry] [--forzar]
 //   --dry     calcula y muestra un resumen, sin escribir
 //   --forzar  recalcula aunque la huella de resultados no haya cambiado
@@ -12,6 +12,11 @@ const DB_URL = process.env.FIREBASE_DB_URL || 'https://quiniela-clausura-2027-de
 const args = process.argv.slice(2);
 const DRY = args.includes('--dry');
 const FORZAR = args.includes('--forzar');
+// Override opcional (solo para pruebas con --dry): JORNADAS_REGULARES=N
+const OPCIONES = {};
+if (process.env.JORNADAS_REGULARES && Number.isInteger(Number(process.env.JORNADAS_REGULARES)) && Number(process.env.JORNADAS_REGULARES) > 0) {
+  OPCIONES.jornadasRegulares = Number(process.env.JORNADAS_REGULARES);
+}
 
 async function leer(db, ruta) { return (await db.ref(ruta).get()).val(); }
 const n = (o) => (o && typeof o === 'object' ? Object.keys(o).length : 0);
@@ -31,10 +36,12 @@ async function main() {
 
     // 2) Lectura pesada (solo si hubo cambios).
     const [usuarios, predicciones, referidos] = await Promise.all([leer(db, 'usuarios'), leer(db, 'predicciones'), leer(db, 'referidos')]);
-    const calculo = calcularTablas({ usuarios, partidos, resultados, predicciones, referidos });
+    const calculo = calcularTablas({ usuarios, partidos, resultados, predicciones, referidos }, OPCIONES);
     const cambios = planActualizacion(calculo, meta, huella);
     console.log('Usuarios: ' + n(usuarios) + ' | partidos: ' + n(partidos) + ' | resultados: ' + n(resultados) + ' | referidos: ' + n(referidos));
     console.log('Jornadas completas: ' + (calculo.jornadasCompletas.join(',') || 'ninguna') + ' | filas en tabla: ' + n(calculo.tabla));
+    console.log('Fases -> regular: ' + calculo.fases.regular + ' | Liguilla: ' + calculo.fases.liguilla + ' | campeón: ' + calculo.fases.campeon
+      + ' | filas Liguilla: ' + n(calculo.tablaLiguilla) + ' | filas Campeón de Campeones: ' + n(calculo.tablaFinal));
     if (DRY) { console.log('--dry: no se escribió nada. Rutas que se actualizarían: ' + Object.keys(cambios).length); return; }
 
     // 3) Una sola actualización multi-ruta: el cliente nunca ve una tabla a medias.
