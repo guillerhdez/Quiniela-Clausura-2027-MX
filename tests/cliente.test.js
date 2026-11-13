@@ -376,3 +376,80 @@ test('E2a: cuerpoPartidoCalendario arma el partido canónico y conserva sede', (
   assert.equal(C.cuerpoPartidoCalendario(pend, 12.5, null), null);
   assert.equal(C.cuerpoPartidoCalendario(pend, 100, null), null);
 });
+
+/* ---------- Fase E2b: cargador manual de calendario ---------- */
+test('E2b: fechaCdmxAMs (CDMX = UTC-6) y fechas inválidas', () => {
+  assert.equal(C.fechaCdmxAMs('2026-11-20 21:00'), Date.parse('2026-11-21T03:00:00Z'));
+  assert.equal(C.fechaCdmxAMs('2026-11-20T21:00'), Date.parse('2026-11-21T03:00:00Z'));
+  assert.equal(C.fechaCdmxAMs('2027-01-10 00:00'), Date.parse('2027-01-10T06:00:00Z'));
+  assert.equal(C.fechaCdmxAMs('2026-12-31 20:30'), Date.parse('2027-01-01T02:30:00Z'));
+  ['2026-02-30 10:00', '2026-13-01 10:00', '2026-11-20 24:00', '2026-11-20 21:60', '20/11/2026 21:00', '', null, undefined, '2026-11-20', '2001-01-01 10:00'].forEach((x) => assert.equal(C.fechaCdmxAMs(x), null, String(x)));
+});
+
+const J17C = [['Tijuana', 'Atlante', '2026-11-20 21:00'], ['Puebla', 'Atlético de San Luis', '2026-11-20 19:00'], ['Juárez', 'Atlas', '2026-11-20 21:00'],
+  ['Santos Laguna', 'León', '2026-11-21 17:00'], ['Pachuca', 'Toluca', '2026-11-21 16:50'], ['Pumas UNAM', 'Monterrey', '2026-11-21 19:00'],
+  ['Tigres UANL', 'América', '2026-11-21 21:00'], ['Guadalajara', 'Cruz Azul', '2026-11-22 17:07'], ['Querétaro', 'Necaxa', '2026-11-22 19:00']];
+const cargaJ17 = () => JSON.stringify(J17C.map((r) => ({ jornada: 17, local: r[0], visitante: r[1], fecha: r[2] })));
+const AHORA_C = Date.parse('2026-11-13T18:00:00Z');
+
+test('E2b: Jornada 17 completa → 9 nuevos, sin errores ni avisos, ids y kickoff UTC correctos', () => {
+  const r = C.analizarCarga(cargaJ17(), {}, {}, AHORA_C);
+  assert.equal(r.errorGlobal, ''); assert.equal(r.resumen.nuevos, 9); assert.equal(r.resumen.errores, 0);
+  assert.equal(r.puedeCargar, true); assert.deepEqual(r.avisos, []);
+  assert.equal(r.filas[0].id, 'j17_tijuana_atlante');
+  assert.deepEqual(r.filas[0].partido, { local: 'Tijuana', visitante: 'Atlante', kickoff: Date.parse('2026-11-21T03:00:00Z'), fase: 'regular', jornada: 17 });
+  assert.equal(r.filas[4].partido.kickoff, Date.parse('2026-11-21T22:50:00Z'));
+});
+
+test('E2b: errores de formato bloquean y no escriben nada', () => {
+  assert.match(C.analizarCarga('no json', {}, {}, AHORA_C).errorGlobal, /JSON válido/);
+  assert.match(C.analizarCarga('{}', {}, {}, AHORA_C).errorGlobal, /lista/);
+  assert.match(C.analizarCarga('[]', {}, {}, AHORA_C).errorGlobal, /vacía/);
+  assert.match(C.analizarCarga(JSON.stringify(new Array(201).fill({})), {}, {}, AHORA_C).errorGlobal, /Máximo/);
+  const mala = [{ jornada: 18, local: 'Mazatlán', visitante: 'Tijuana', fecha: '2026-02-30 10:00' }, { jornada: 5, local: 'Tijuana', visitante: 'Tijuana', fecha: '2026-11-20 21:00' }, 7, { jornada: 5, local: 'Toluca', visitante: 'León', fecha: '2026-11-20 21:00', sede: 5 }];
+  const r = C.analizarCarga(JSON.stringify(mala), {}, {}, AHORA_C);
+  assert.equal(r.puedeCargar, false); assert.equal(r.resumen.errores, 4);
+  assert.ok(r.filas[0].errores.length >= 3); assert.match(r.filas[1].errores[0], /mismo equipo/); assert.match(r.filas[3].errores[0], /Sede/);
+});
+
+test('E2b: repetidos y equipo duplicado en la misma Jornada son error', () => {
+  const dup = [{ jornada: 3, local: 'Tijuana', visitante: 'Atlante', fecha: '2027-01-10 19:00' }, { jornada: 3, local: 'Tijuana', visitante: 'Atlante', fecha: '2027-01-10 19:00' },
+    { jornada: 3, local: 'Atlante', visitante: 'Toluca', fecha: '2027-01-10 21:00' }, { jornada: 4, local: 'Atlante', visitante: 'Toluca', fecha: '2027-01-17 21:00' }];
+  const r = C.analizarCarga(JSON.stringify(dup), {}, {}, AHORA_C);
+  assert.match(r.filas[1].errores[0], /repetido/); assert.match(r.filas[2].errores[0], /ya juega en la Jornada 3/);
+  assert.equal(r.filas[3].estado, 'nuevo'); assert.equal(r.puedeCargar, false);
+});
+
+test('E2b: existentes — igual, cambia (con aviso) y con resultado bloquea; solo-pasado avisa', () => {
+  const prev = C.analizarCarga(cargaJ17(), {}, {}, AHORA_C).filas;
+  const ex = {}; prev.forEach((f) => { ex[f.id] = Object.assign({ sede: 'X' }, f.partido); });
+  const igual = C.analizarCarga(cargaJ17(), ex, {}, AHORA_C);
+  assert.equal(igual.resumen.iguales, 9); assert.equal(igual.puedeCargar, false);
+  const carga = JSON.parse(cargaJ17()); carga[0].fecha = '2026-11-20 22:00';
+  const cam = C.analizarCarga(JSON.stringify(carga), ex, {}, AHORA_C);
+  assert.equal(cam.resumen.cambian, 1); assert.equal(cam.puedeCargar, true); assert.match(cam.filas[0].avisos[0], /Cambia el horario/);
+  const cuerpo = C.cuerpoCarga(cam.filas[0], cam.filas[0].antes);
+  assert.equal(cuerpo.sede, 'X'); assert.equal(cuerpo.kickoff, Date.parse('2026-11-21T04:00:00Z'));
+  const conRes = C.analizarCarga(JSON.stringify(carga), ex, { j17_tijuana_atlante: { gl: 1, gv: 0 } }, AHORA_C);
+  assert.equal(conRes.filas[0].estado, 'error'); assert.match(conRes.filas[0].errores[0], /resultado/); assert.equal(conRes.puedeCargar, false);
+  const pasada = C.analizarCarga(cargaJ17(), {}, {}, Date.parse('2026-11-21T12:00:00Z'));
+  assert.match(pasada.filas[0].avisos.join(), /ya pasó/);
+});
+
+test('E2b: aviso de tamaño de Jornada (≠ 9) considerando partidos ya existentes', () => {
+  const carga = JSON.parse(cargaJ17()).slice(0, 8);
+  const r = C.analizarCarga(JSON.stringify(carga), {}, {}, AHORA_C);
+  assert.deepEqual(r.avisos, ['Jornada 17: quedaría con 8 partido(s), se esperan 9.']); assert.equal(r.puedeCargar, true);
+  const ex = { j17_queretaro_necaxa: { local: 'Querétaro', visitante: 'Necaxa', kickoff: Date.parse('2026-11-23T01:00:00Z'), fase: 'regular', jornada: 17 } };
+  assert.deepEqual(C.analizarCarga(JSON.stringify(carga), ex, {}, AHORA_C).avisos, []);
+});
+
+test('E2b: clubDe resuelve alias y la lista tiene 18 clubes únicos', () => {
+  assert.equal(C.CLUBES.length, 18); assert.equal(new Set(C.CLUBES.map((c) => c.clave)).size, 18);
+  assert.equal(C.clubDe('FC Juárez').nombre, 'Juárez'); assert.equal(C.clubDe('Chivas').nombre, 'Guadalajara'); assert.equal(C.clubDe('Mazatlán'), null);
+});
+
+test('E2b: los clubes y alias del cliente coinciden con lib/calendario.js (misma lista en ambos lados)', () => {
+  const L = require('../lib/calendario');
+  assert.deepEqual(C.CLUBES, L.EQUIPOS);
+});
