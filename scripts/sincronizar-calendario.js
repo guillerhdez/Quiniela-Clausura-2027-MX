@@ -36,13 +36,22 @@ async function main() {
   const ahora = Date.now();
 
   // 1) Fuentes (antes de abrir Firebase: si no hay datos, no se escribe nada).
-  const sdb = []; let fallosSdb = 0;
-  for (let r = 1; r <= JORNADAS_REGULARES; r++) {
-    const j = await get(TSDB + '/eventsround.php?id=4350&r=' + r + '&s=' + TEMP_SDB);
-    if (j === null) { fallosSdb++; console.log('Ronda ' + r + ': sin respuesta de TheSportsDB'); }
-    for (const e of ((j && j.events) || [])) { const n = normalizarSdb(e); if (n) sdb.push(n); }
-    await espera(2500);
+  const sdb = []; let pendientesRondas = [];
+  for (let r = 1; r <= JORNADAS_REGULARES; r++) pendientesRondas.push(r);
+  // Hasta 3 pasadas: las rondas que dan 429 se reintentan tras una pausa larga (la clave pública es compartida).
+  for (let pasada = 1; pasada <= 3 && pendientesRondas.length; pasada++) {
+    if (pasada > 1) { console.log('Pasada ' + pasada + ': reintentando rondas ' + pendientesRondas.join(', ') + ' tras pausa'); await espera(30000 * (pasada - 1)); }
+    const falladas = [];
+    for (const r of pendientesRondas) {
+      const j = await get(TSDB + '/eventsround.php?id=4350&r=' + r + '&s=' + TEMP_SDB);
+      if (j === null) falladas.push(r);
+      for (const e of ((j && j.events) || [])) { const n = normalizarSdb(e); if (n) sdb.push(n); }
+      await espera(3500);
+    }
+    pendientesRondas = falladas;
   }
+  const fallosSdb = pendientesRondas.length;
+  if (fallosSdb) console.log('Rondas sin respuesta tras 3 pasadas: ' + pendientesRondas.join(', '));
   const espn = []; let fallosEspn = 0;
   for (let d = ahora - 864e5; d <= ahora + HORIZONTE_MS + 864e5; d += 864e5) {
     const j = await get(ESPN + '?dates=' + yyyymmdd(d));
