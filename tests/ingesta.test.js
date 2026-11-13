@@ -64,3 +64,17 @@ test('decidir: local y visitante invertidos no empareja (evita cruzar marcadores
   const r = I.decidir(p, [sdb('Atlas', 'Atletico San Luis', 3, 0)], [esp('Atlas', 'Atlético de San Luis', 3, 0)], K + 3 * H);
   assert.equal(r.estado, 'espera');
 });
+
+test('planPendientes: nuevo avisa; igual no se reescribe ni avisa; cambio de motivo o marcador vuelve a avisar', () => {
+  const dec = { a: { motivo: 'discrepancia', sdb: { gl: 0, gv: 1 }, espn: { gl: 1, gv: 1 } } };
+  const p1 = I.planPendientes(null, dec, 111);
+  assert.deepEqual(p1.nuevos, ['a']);
+  assert.deepEqual(p1.escribir.a, { motivo: 'discrepancia', sdb: { gl: 0, gv: 1 }, espn: { gl: 1, gv: 1 }, hora: 111 });
+  const p2 = I.planPendientes({ a: p1.escribir.a }, dec, 222);
+  assert.deepEqual(p2.nuevos, []); assert.deepEqual(p2.escribir, {});
+  const p3 = I.planPendientes({ a: p1.escribir.a }, { a: { motivo: 'discrepancia', sdb: { gl: 0, gv: 1 }, espn: { gl: 2, gv: 1 } } }, 333);
+  assert.deepEqual(p3.nuevos, ['a']); assert.equal(p3.escribir.a.hora, 333);
+  const p4 = I.planPendientes({ a: p1.escribir.a }, { a: { motivo: 'solo-espn', sdb: null, espn: { gl: 1, gv: 1 } } }, 444);
+  assert.deepEqual(p4.nuevos, ['a']);
+  assert.deepEqual(I.planPendientes({}, {}, 1), { escribir: {}, nuevos: [] });
+});

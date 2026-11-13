@@ -7,7 +7,7 @@
 // Los logs son públicos: solo ids de partido, equipos y marcadores (datos públicos); nunca uids ni claves.
 const { initializeApp, cert, deleteApp } = require('firebase-admin/app');
 const { getDatabase } = require('firebase-admin/database');
-const { partidosPorIngerir, decidir } = require('../lib/ingesta');
+const { partidosPorIngerir, decidir, planPendientes } = require('../lib/ingesta');
 
 const DB_URL = process.env.FIREBASE_DB_URL || 'https://quiniela-clausura-2027-default-rtdb.firebaseio.com';
 const ESPN = 'https://site.api.espn.com/apis/site/v2/sports/soccer/mex.1/scoreboard';
@@ -48,7 +48,7 @@ async function main() {
   const app = initializeApp({ credential: cert(cuenta), databaseURL: DB_URL });
   try {
     const db = getDatabase(app);
-    const [partidos, resultados] = await Promise.all([db.ref('partidos').get().then((s) => s.val()), db.ref('resultados').get().then((s) => s.val())]);
+    const [partidos, resultados, pendientesActuales] = await Promise.all(['partidos', 'resultados', 'pendientes'].map((r) => db.ref(r).get().then((s) => s.val())));
     const ahora = Date.now();
     const lista = partidosPorIngerir(partidos, resultados, ahora);
     console.log('Partidos por ingerir: ' + lista.length);
@@ -60,7 +60,7 @@ async function main() {
       const r = await get(TSDB + '/eventsround.php?id=4350&r=' + j + '&s=' + TEMP_SDB);
       sdbPorJornada[j] = (r && r.events) || [];
     }
-    const cambios = {}; let n = { publicar: 0, espera: 0, pendiente: 0 };
+    const cambios = {}, decisiones = {}; let n = { publicar: 0, espera: 0, pendiente: 0 };
     for (const p of lista) {
       const dias = [p.kickoff - 864e5, p.kickoff, p.kickoff + 864e5].map(yyyymmdd);
       const espn = []; for (const d of [...new Set(dias)]) espn.push(...await espnDia(d, espnCache));
@@ -68,12 +68,16 @@ async function main() {
       n[r.estado]++;
       const etiqueta = p.id + ' J' + p.jornada + ' ' + p.local + ' vs ' + p.visitante;
       if (r.estado === 'publicar') { cambios['resultados/' + p.id] = { gl: r.gl, gv: r.gv }; cambios['pendientes/' + p.id] = null; console.log('PUBLICAR  ' + etiqueta + ' ' + r.gl + '-' + r.gv); }
-      else if (r.estado === 'pendiente') { cambios['pendientes/' + p.id] = { motivo: r.motivo, sdb: r.sdb, espn: r.espn, hora: ahora }; console.log('PENDIENTE ' + etiqueta + ' [' + r.motivo + '] SDB ' + JSON.stringify(r.sdb) + ' ESPN ' + JSON.stringify(r.espn)); }
+      else if (r.estado === 'pendiente') { decisiones[p.id] = { motivo: r.motivo, sdb: r.sdb, espn: r.espn }; console.log('PENDIENTE ' + etiqueta + ' [' + r.motivo + '] SDB ' + JSON.stringify(r.sdb) + ' ESPN ' + JSON.stringify(r.espn)); }
       else console.log('ESPERA    ' + etiqueta);
     }
     console.log('Resumen -> publicar: ' + n.publicar + ' | espera: ' + n.espera + ' | pendientes: ' + n.pendiente);
-    if (DRY) { console.log('--dry: no se escribió nada.'); return; }
+    const plan = planPendientes(pendientesActuales, decisiones, ahora);
+    for (const pid of Object.keys(plan.escribir)) cambios['pendientes/' + pid] = plan.escribir[pid];
+    if (DRY) { console.log('--dry: no se escribió nada. Pendientes nuevos o cambiados: ' + plan.nuevos.length); return; }
     if (Object.keys(cambios).length) { await db.ref().update(cambios); console.log('Escritura multi-ruta aplicada: ' + Object.keys(cambios).length + ' rutas.'); }
+    // Aviso: la corrida termina en rojo solo si hay pendientes nuevos o cambiados; GitHub manda correo de las corridas fallidas.
+    if (plan.nuevos.length) { console.error('AVISO: ' + plan.nuevos.length + ' pendiente(s) nuevo(s) por revisar en la pestaña Admin: ' + plan.nuevos.join(', ')); process.exitCode = 1; }
   } finally { await deleteApp(app); }
 }
 main().catch((e) => { console.error('Error: ' + (e && e.code ? e.code + ' - ' : '') + (e && e.message ? String(e.message).slice(0, 200) : 'desconocido')); process.exit(1); });

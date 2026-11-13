@@ -285,3 +285,55 @@ test('seriesDeGrupo: ida y vuelta juntas en orden 1v8…4v5, con encabezado; nul
   const fin = C.seriesDeGrupo(g.find((x) => x.titulo === 'Final'), f.partidos);
   assert.ok(fin.every((s) => /Por definir/.test(s.titulo)));
 });
+
+/* ---------- Fase E1: panel admin ---------- */
+test('E1: marcadorAdminValido y enteroDeTexto (0–30, solo dígitos)', () => {
+  assert.equal(C.marcadorAdminValido(0, 0), true);
+  assert.equal(C.marcadorAdminValido(30, 30), true);
+  assert.equal(C.marcadorAdminValido(31, 0), false);
+  assert.equal(C.marcadorAdminValido(-1, 0), false);
+  assert.equal(C.marcadorAdminValido(1.5, 0), false);
+  assert.equal(C.marcadorAdminValido('1', 0), false);
+  assert.equal(C.enteroDeTexto(' 3 '), 3);
+  assert.equal(C.enteroDeTexto('12'), 12);
+  assert.equal(C.enteroDeTexto(''), null);
+  assert.equal(C.enteroDeTexto('-1'), null);
+  assert.equal(C.enteroDeTexto('1.5'), null);
+  assert.equal(C.enteroDeTexto('abc'), null);
+  assert.equal(C.enteroDeTexto('123'), null);
+  assert.equal(C.enteroDeTexto(null), null);
+  assert.deepEqual(C.cuerpoResultado(2, 1), { gl: 2, gv: 1 });
+});
+
+test('E1: opcionesPendiente solo con marcadores válidos y filasPendientes ordena por kickoff', () => {
+  assert.deepEqual(C.opcionesPendiente({ sdb: { gl: 0, gv: 1 }, espn: { gl: 1, gv: 1 } }), [{ fuente: 'TheSportsDB', gl: 0, gv: 1 }, { fuente: 'ESPN', gl: 1, gv: 1 }]);
+  assert.deepEqual(C.opcionesPendiente({ sdb: null, espn: { gl: 2, gv: 0 } }), [{ fuente: 'ESPN', gl: 2, gv: 0 }]);
+  assert.deepEqual(C.opcionesPendiente({ sdb: { gl: 99, gv: 0 } }), []);
+  assert.deepEqual(C.opcionesPendiente(null), []);
+  const partidos = {
+    a: { local: 'A', visitante: 'B', kickoff: 2000, fase: 'regular', jornada: 3 },
+    b: { local: 'C', visitante: 'D', kickoff: 1000, fase: 'regular', jornada: 2 }
+  };
+  const f = C.filasPendientes({ a: { motivo: 'discrepancia', sdb: { gl: 1, gv: 0 }, espn: { gl: 2, gv: 0 }, hora: 5 }, b: { motivo: 'solo-espn', espn: { gl: 1, gv: 1 } }, z: { motivo: 'sin-contraparte' }, x: null }, partidos);
+  assert.deepEqual(f.map((x) => x.id), ['b', 'a', 'z']);
+  assert.equal(f[0].titulo, 'C vs D'); assert.equal(f[0].grupo, 'Jornada 2'); assert.equal(f[0].etiqueta, 'Solo ESPN tiene el marcador');
+  assert.equal(f[1].opciones.length, 2); assert.equal(f[1].hora, 5);
+  assert.equal(f[2].titulo, 'Partido z'); assert.equal(f[2].kickoff, null); assert.equal(f[2].etiqueta, 'No se encontró el partido en las fuentes');
+  assert.deepEqual(C.filasPendientes(null, null), []);
+});
+
+test('E1: ultimosResultados (recientes primero, límite) y sinResultado (solo kickoff pasado)', () => {
+  const partidos = {
+    1: { local: 'A', visitante: 'B', kickoff: 1000, fase: 'regular', jornada: 1 },
+    2: { local: 'C', visitante: 'D', kickoff: 3000, fase: 'regular', jornada: 1 },
+    3: { local: 'E', visitante: 'F', kickoff: 2000, fase: 'regular', jornada: 1 },
+    4: { local: 'G', visitante: 'H', kickoff: 9000, fase: 'regular', jornada: 2 }
+  };
+  const res = { 1: { gl: 1, gv: 0 }, 2: { gl: 2, gv: 2 }, 3: { gl: 99, gv: 0 }, 7: { gl: 0, gv: 0 } };
+  const u = C.ultimosResultados(partidos, res, 5);
+  assert.deepEqual(u.map((x) => x.id), ['2', '1']);                 // el 3 es inválido y el 7 no tiene partido
+  assert.equal(C.ultimosResultados(partidos, res, 1).length, 1);
+  assert.equal(C.sinResultado(partidos, res, 5000), 1);              // el 3 (marcador inválido) cuenta como sin resultado; el 4 aún no se juega
+  assert.equal(C.sinResultado(partidos, res, 10000), 2);
+  assert.equal(C.sinResultado(null, null, 1), 0);
+});
