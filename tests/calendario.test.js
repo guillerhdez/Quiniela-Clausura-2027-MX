@@ -107,3 +107,18 @@ test('pendientes resolubles traen `base` canónica (equipos y Jornada); los irre
   const s = sdb(); s[1].local = 'Mazatlán';
   assert.equal(C.decidirCalendario(s, espn(), {}, {}, { ahora: AHORA }).pendientes['j17_mazatlan_atletico-de-san-luis'].base, undefined);
 });
+
+test('pendiente resuelto a mano (partido ya cargado con el horario de una fuente) no se vuelve a marcar', () => {
+  const e = espn(); e[0].kickoff += 30 * 60000;
+  const sdbK = Date.parse('2026-11-21T03:00:00Z');
+  const ex = { j17_tijuana_atlante: { local: 'Tijuana', visitante: 'Atlante', kickoff: sdbK, fase: 'regular', jornada: 17 } };
+  const r = C.decidirCalendario(sdb(), e, ex, {}, { ahora: AHORA });
+  assert.equal(r.pendientes.j17_tijuana_atlante, undefined);
+  assert.equal(r.cargar.j17_tijuana_atlante, undefined);
+  const ex2 = { j17_tijuana_atlante: Object.assign({}, ex.j17_tijuana_atlante, { kickoff: e[0].kickoff }) };
+  assert.equal(C.decidirCalendario(sdb(), e, ex2, {}, { ahora: AHORA }).pendientes.j17_tijuana_atlante, undefined);
+  const ex3 = { j17_tijuana_atlante: Object.assign({}, ex.j17_tijuana_atlante, { kickoff: sdbK + 7200000 }) };
+  assert.equal(C.decidirCalendario(sdb(), e, ex3, {}, { ahora: AHORA }).pendientes.j17_tijuana_atlante.motivo, 'horario-distinto');
+  const r4 = C.decidirCalendario(sdb(), espn().slice(1), ex, {}, { ahora: AHORA });
+  assert.equal(r4.pendientes.j17_tijuana_atlante, undefined);
+});

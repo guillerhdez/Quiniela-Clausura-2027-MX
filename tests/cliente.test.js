@@ -337,3 +337,42 @@ test('E1: ultimosResultados (recientes primero, límite) y sinResultado (solo ki
   assert.equal(C.sinResultado(partidos, res, 10000), 2);
   assert.equal(C.sinResultado(null, null, 1), 0);
 });
+
+/* ---------- Fase E2a: calendario por revisar ---------- */
+test('E2a: opcionesCalendario exige base canónica y horarios válidos', () => {
+  const base = { local: 'Tijuana', visitante: 'Atlante', jornada: 17 };
+  const pend = { motivo: 'horario-distinto', base, sdb: { kickoff: 1795000000000 }, espn: { kickoff: 1795001800000 } };
+  assert.deepEqual(C.opcionesCalendario(pend), [{ fuente: 'TheSportsDB', kickoff: 1795000000000 }, { fuente: 'ESPN', kickoff: 1795001800000 }]);
+  assert.deepEqual(C.opcionesCalendario({ base, sdb: { kickoff: 1795000000000 }, espn: null }), [{ fuente: 'TheSportsDB', kickoff: 1795000000000 }]);
+  assert.deepEqual(C.opcionesCalendario({ sdb: { kickoff: 1795000000000 } }), []);                       // sin base
+  assert.deepEqual(C.opcionesCalendario({ base: { local: 'A', visitante: 'A', jornada: 1 }, sdb: { kickoff: 1795000000000 } }), []);
+  assert.deepEqual(C.opcionesCalendario({ base, sdb: { kickoff: 5 } }), []);                             // horario inválido
+  assert.deepEqual(C.opcionesCalendario(null), []);
+});
+
+test('E2a: filasCalendario ordena por horario, muestra lo ya cargado y tolera pendientes sin base', () => {
+  const base = { local: 'Tijuana', visitante: 'Atlante', jornada: 17 };
+  const pc = {
+    j17_b: { motivo: 'horario-distinto', base, sdb: { kickoff: 1795100000000 }, espn: { kickoff: 1795101800000 } },
+    j17_a: { motivo: 'solo-thesportsdb', base: { local: 'Puebla', visitante: 'León', jornada: 17 }, sdb: { kickoff: 1795000000000 }, espn: null },
+    j17_z: { motivo: 'equipo-desconocido', sdb: { local: 'Mazatlán', visitante: 'Toluca', kickoff: 1795200000000 } },
+    x: null
+  };
+  const partidos = { j17_b: { local: 'Tijuana', visitante: 'Atlante', kickoff: 1795100000000, fase: 'regular', jornada: 17 } };
+  const f = C.filasCalendario(pc, partidos);
+  assert.deepEqual(f.map((x) => x.id), ['j17_a', 'j17_b', 'j17_z']);
+  assert.equal(f[1].titulo, 'Tijuana vs Atlante'); assert.equal(f[1].grupo, 'Jornada 17'); assert.equal(f[1].cargadoKickoff, 1795100000000);
+  assert.equal(f[0].cargadoKickoff, null); assert.equal(f[0].etiqueta, 'Solo TheSportsDB lista este partido');
+  assert.equal(f[2].titulo, 'Mazatlán vs Toluca'); assert.deepEqual(f[2].opciones, []);
+  assert.deepEqual(C.filasCalendario(null, null), []);
+});
+
+test('E2a: cuerpoPartidoCalendario arma el partido canónico y conserva sede', () => {
+  const pend = { base: { local: 'Tijuana', visitante: 'Atlante', jornada: 17 } };
+  assert.deepEqual(C.cuerpoPartidoCalendario(pend, 1795000000000, null), { local: 'Tijuana', visitante: 'Atlante', kickoff: 1795000000000, fase: 'regular', jornada: 17 });
+  const c = C.cuerpoPartidoCalendario(pend, 1795000000000, { local: 'X', visitante: 'Y', kickoff: 1, fase: 'regular', jornada: 3, sede: 'Caliente' });
+  assert.equal(c.sede, 'Caliente'); assert.equal(c.local, 'Tijuana'); assert.equal(c.jornada, 17);
+  assert.equal(C.cuerpoPartidoCalendario({}, 1795000000000, null), null);
+  assert.equal(C.cuerpoPartidoCalendario(pend, 12.5, null), null);
+  assert.equal(C.cuerpoPartidoCalendario(pend, 100, null), null);
+});
