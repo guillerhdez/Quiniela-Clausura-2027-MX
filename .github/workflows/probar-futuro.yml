@@ -1,0 +1,32 @@
+name: Probar calendario lejano
+
+# Solo lectura (ESPN y TheSportsDB). Sin secrets ni escritura. Se lanza a mano.
+on:
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: 'Primer día (AAAAMMDD)'
+        type: string
+        default: '20261114'
+      hasta:
+        description: 'Último día (AAAAMMDD)'
+        type: string
+        default: '20270430'
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Consultar fechas lejanas
+        env:
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+        run: node scripts/probar-futuro.js
