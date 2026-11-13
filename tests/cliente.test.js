@@ -453,3 +453,25 @@ test('E2b: los clubes y alias del cliente coinciden con lib/calendario.js (misma
   const L = require('../lib/calendario');
   assert.deepEqual(C.CLUBES, L.EQUIPOS);
 });
+
+/* ---------- Fase E3a: moderación de nicks ---------- */
+test('E3a: tarjetaUsuario y ultimosUsuarios (recientes primero, inválidos fuera, sin correo)', () => {
+  assert.deepEqual(C.tarjetaUsuario('u1', { nick: 'Memo', creado: 5, correo: 'x@y.com' }), { uid: 'u1', nick: 'Memo', creado: 5 });
+  assert.equal(C.tarjetaUsuario('u1', { nick: '' }), null); assert.equal(C.tarjetaUsuario('', { nick: 'A' }), null); assert.equal(C.tarjetaUsuario('u', null), null);
+  assert.equal(C.tarjetaUsuario('u1', { nick: 'Memo' }).creado, null);
+  const u = { a: { nick: 'A', creado: 1 }, b: { nick: 'B', creado: 3 }, c: { nick: 'C', creado: 2 }, d: 7, e: { nick: 5 } };
+  assert.deepEqual(C.ultimosUsuarios(u, 2).map((x) => x.nick), ['B', 'C']);
+  assert.deepEqual(C.ultimosUsuarios(null, 5), []);
+  assert.equal(C.queryUsuariosRecientes(20), 'orderBy=%22creado%22&limitToLast=20');
+});
+
+test('E3a: planRenombrarAdmin — igual, inválido, ocupado, solo mayúsculas y cambio normal', () => {
+  assert.match(C.planRenombrarAdmin('u1', 'Memo', 'Memo', null).error, /mismo/);
+  assert.ok(C.planRenombrarAdmin('u1', 'Memo', 'a b', null).error);               // formato
+  assert.ok(C.planRenombrarAdmin('u1', 'Memo', 'ab', null).error);                 // corto
+  assert.equal(C.planRenombrarAdmin('u1', 'Memo', 'Jugador_01', 'u2').error, 'Ese nick ya está en uso. Elige otro.');
+  assert.deepEqual(C.planRenombrarAdmin('u1', 'Memo', 'MEMO', 'u1').pasos, ['actualizar']);   // solo mayúsculas: nicks no cambia
+  assert.deepEqual(C.planRenombrarAdmin('u1', 'Memo', 'Jugador_01', null).pasos, ['reclamar', 'actualizar', 'liberar']);
+  assert.deepEqual(C.planRenombrarAdmin('u1', 'Memo', 'Jugador_01', 'u1').pasos, ['reclamar', 'actualizar', 'liberar']);
+  assert.equal(C.planRenombrarAdmin('u1', 'Memo', '  Jugador_01  ', null).nick, 'Jugador_01');
+});
