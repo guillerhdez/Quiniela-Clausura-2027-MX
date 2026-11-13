@@ -1,0 +1,27 @@
+name: Probar calendario futuro
+
+# Solo lectura (TheSportsDB y ESPN). Sin secrets ni escritura. Se lanza a mano.
+on:
+  workflow_dispatch:
+    inputs:
+      rondas:
+        description: 'Rondas (Jornadas) a comparar, separadas por coma'
+        type: string
+        default: '17'
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Comparar calendario
+        env:
+          RONDAS: ${{ inputs.rondas }}
+        run: node scripts/probar-calendario.js
