@@ -475,3 +475,16 @@ test('E3a: planRenombrarAdmin — igual, inválido, ocupado, solo mayúsculas y 
   assert.deepEqual(C.planRenombrarAdmin('u1', 'Memo', 'Jugador_01', 'u1').pasos, ['reclamar', 'actualizar', 'liberar']);
   assert.equal(C.planRenombrarAdmin('u1', 'Memo', '  Jugador_01  ', null).nick, 'Jugador_01');
 });
+
+test('E3a: textoErrorAdmin añade el detalle del servidor solo si existe', () => {
+  assert.equal(C.textoErrorAdmin({ mensaje: 'Falló (400).', detalle: 'Index not defined' }, 'x'), 'Falló (400). Detalle: Index not defined');
+  assert.equal(C.textoErrorAdmin({ mensaje: 'Falló (400).' }, 'x'), 'Falló (400).');
+  assert.equal(C.textoErrorAdmin(null, 'por defecto'), 'por defecto');
+});
+
+test('E3a: la leyenda del nick avisa de espacios y coincide con la regla real', () => {
+  assert.equal(C.leyendaNickCoincide(), true);
+  assert.match(C.AYUDA_NICK, /Sin espacios/);
+  assert.equal(C.validarNick('Juan Perez') === null, false);   // con espacio: inválido
+  assert.equal(C.validarNick('Juan_Perez'), null);
+});
