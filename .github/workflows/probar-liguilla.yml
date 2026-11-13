@@ -1,0 +1,32 @@
+name: Probar rondas de Liguilla
+
+# Solo lectura (TheSportsDB). Sin secrets ni escritura. Se lanza a mano.
+on:
+  workflow_dispatch:
+    inputs:
+      desde:
+        description: 'Primera ronda a consultar'
+        type: string
+        default: '17'
+      hasta:
+        description: 'Última ronda a consultar'
+        type: string
+        default: '30'
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Consultar rondas
+        env:
+          DESDE: ${{ inputs.desde }}
+          HASTA: ${{ inputs.hasta }}
+        run: node scripts/probar-liguilla.js
