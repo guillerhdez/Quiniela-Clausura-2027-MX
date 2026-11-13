@@ -1,0 +1,40 @@
+name: Probar reset de contraseña (sondeo)
+
+# Disparo manual. Sondeo de E3b: ¿acepta Google sendOobCode (PASSWORD_RESET) desde un servidor con la Web API key
+# restringida por sitio web? Usa los secrets FIREBASE_WEB_API_KEY y CORREO_PRUEBA (cuenta de prueba).
+# El correo va en un secret (no en un input) porque los inputs de workflow_dispatch se ven en la página pública de la corrida.
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: 'Qué llamadas hacer (cada una envía un correo a la cuenta de prueba)'
+        type: choice
+        options:
+          - ambos
+          - con-referer
+          - sin-referer
+        default: ambos
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probar-reset
+  cancel-in-progress: false
+
+jobs:
+  sondeo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Pruebas de la lógica del sondeo
+        run: node --test tests/sondeo-reset.test.js
+      - name: Sondeo
+        env:
+          FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+          CORREO_PRUEBA: ${{ secrets.CORREO_PRUEBA }}
+        run: node scripts/probar-reset.js ${{ inputs.modo }}
