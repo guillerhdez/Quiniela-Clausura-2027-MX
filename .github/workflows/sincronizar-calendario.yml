@@ -1,0 +1,35 @@
+name: Sincronizar calendario
+
+# Lo dispara el cron externo (cron-job.org) vía workflow_dispatch, cada 6 horas. Carga solo si TheSportsDB y ESPN coinciden.
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Solo consultar y decidir (no escribe en la base)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sincronizar-calendario
+  cancel-in-progress: false
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Pruebas de lógica
+        run: npm test
+      - name: Sincronizar calendario
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/sincronizar-calendario.js ${{ inputs.dry && '--dry' || '' }}

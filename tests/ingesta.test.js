@@ -78,3 +78,12 @@ test('planPendientes: nuevo avisa; igual no se reescribe ni avisa; cambio de mot
   assert.deepEqual(p4.nuevos, ['a']);
   assert.deepEqual(I.planPendientes({}, {}, 1), { escribir: {}, nuevos: [] });
 });
+
+test('planPendientes: conserva `base` y un cambio de `base` cuenta como nuevo', () => {
+  const dec = { a: { motivo: 'horario-distinto', sdb: { kickoff: 1 }, espn: { kickoff: 2 }, base: { local: 'A', visitante: 'B', jornada: 3 } } };
+  const p1 = I.planPendientes(null, dec, 9);
+  assert.deepEqual(p1.escribir.a.base, { local: 'A', visitante: 'B', jornada: 3 });
+  assert.deepEqual(I.planPendientes({ a: p1.escribir.a }, dec, 10).nuevos, []);
+  const dec2 = { a: Object.assign({}, dec.a, { base: { local: 'A', visitante: 'C', jornada: 3 } }) };
+  assert.deepEqual(I.planPendientes({ a: p1.escribir.a }, dec2, 11).nuevos, ['a']);
+});
