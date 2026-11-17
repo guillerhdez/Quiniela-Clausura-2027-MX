@@ -1,5 +1,5 @@
 'use strict';
-// Avisos push (Fase F): recordatorio por Jornada a los usuarios y aviso de pendientes al admin.
+// Avisos push (Fase F): recordatorio por Jornada (y por ida/vuelta de la Liguilla) a los usuarios y aviso de pendientes al admin.
 // Uso: node scripts/enviar-recordatorios.js [--dry]
 //   --dry  muestra qué enviaría, sin enviar ni escribir
 // Entorno: FIREBASE_SERVICE_ACCOUNT, VAPID_PUBLIC, VAPID_PRIVATE (secrets). VAPID_SUBJECT es opcional.
@@ -45,8 +45,8 @@ async function main() {
   try {
     const db = getDatabase(app);
     const leer = async (ruta) => (await db.ref(ruta).get()).val();
-    const [partidos, notificado, subs, admins, pend, pendCal] = await Promise.all([
-      leer('partidos'), leer('notificado'), leer('pushSubs'), leer('admins'), leer('pendientes'), leer('pendientesPartidos'),
+    const [partidos, resultados, notificado, subs, admins, pend, pendCal] = await Promise.all([
+      leer('partidos'), leer('resultados'), leer('notificado'), leer('pushSubs'), leer('admins'), leer('pendientes'), leer('pendientesPartidos'),
     ]);
     const ahora = Date.now();
     const subsTodas = subs || {};
@@ -55,16 +55,16 @@ async function main() {
     const muertas = new Set();
     console.log('Suscripciones: ' + Object.keys(subsTodas).length);
 
-    // 1) Recordatorio de Jornada
-    const aviso = R.jornadasPorAvisar(partidos, notificado, ahora);
-    if (!aviso.length) console.log('Recordatorio: nada por avisar.');
-    for (const a of aviso) {
-      const r = await enviarA(subsTodas, R.mensajeJornada(a.jornada, a.kickoff), DRY);
-      console.log('Recordatorio Jornada ' + a.jornada + ': suscripciones válidas ' + r.validas + ', enviados ' + r.enviados + ', fallidos ' + r.fallidos + (DRY ? ' (dry)' : ''));
+    // 1) Recordatorio de Jornada o de Liguilla (ida / vuelta): como mucho uno por corrida, el más próximo
+    const aviso = R.proximoAviso(partidos, resultados, notificado, ahora);
+    if (!aviso) console.log('Recordatorio: nada por avisar.');
+    else {
+      const r = await enviarA(subsTodas, aviso.mensaje, DRY);
+      console.log('Recordatorio ' + aviso.etiqueta + ': suscripciones válidas ' + r.validas + ', enviados ' + r.enviados + ', fallidos ' + r.fallidos + (DRY ? ' (dry)' : ''));
       r.muertas.forEach((u) => muertas.add(u));
       if (r.fallidos) hayFallos = true;
-      // Se marca como avisada solo si llegó a alguien: sin suscriptores o con todo fallido se reintenta en la siguiente corrida.
-      if (!DRY && r.enviados > 0) actualizaciones['notificado/j' + a.jornada] = ahora;
+      // Se marca como avisado solo si llegó a alguien: sin suscriptores o con todo fallido se reintenta en la siguiente corrida.
+      if (!DRY && r.enviados > 0) actualizaciones['notificado/' + aviso.marca] = ahora;
     }
 
     // 2) Aviso al admin por pendientes nuevos o cambiados
