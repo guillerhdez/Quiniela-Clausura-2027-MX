@@ -1,0 +1,37 @@
+name: Procesar acciones del admin
+
+# Lo dispara el cron externo (cron-job.org) vía workflow_dispatch, cada minuto. Procesa la cola adminAcciones/:
+# «eliminar» usuario y «reset» (correo de restablecimiento de contraseña). Sin acciones pendientes termina en segundos.
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Solo mostrar qué haría (no escribe, no borra, no envía correos)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: procesar-acciones
+  cancel-in-progress: false
+
+jobs:
+  procesar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Pruebas de lógica
+        run: npm test
+      - name: Procesar cola
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_WEB_API_KEY: ${{ secrets.FIREBASE_WEB_API_KEY }}
+        run: node scripts/procesar-acciones.js ${{ inputs.dry && '--dry' || '' }}
