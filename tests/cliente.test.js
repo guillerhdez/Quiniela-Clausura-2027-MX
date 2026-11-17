@@ -565,3 +565,53 @@ test('E3b: textos de confirmación nombran al usuario y avisan que eliminar no s
   assert.equal(C.etiquetaEstadoAccion('ok'), 'Hecho');
   assert.equal(C.etiquetaEstadoAccion('error'), 'Error');
 });
+
+// ----- Fase F: avisos push y refresco -----
+test('F: urlBase64ABytes decodifica la clave VAPID pública a 65 bytes (punto sin comprimir)', () => {
+  const k = 'BDMox99ySOIr6Sl_kj-bdTAR4GBBBhfMwP62eHWZsaNtbCo3stk7Q6lhugFDj-xmpxrjI_4hrdsFNnWX9pAvjp8';
+  const b = C.urlBase64ABytes(k);
+  assert.equal(b.length, 65);
+  assert.equal(b[0], 4);
+  assert.deepEqual(Array.from(b), Array.from(Buffer.from(k, 'base64url')));
+});
+
+test('F: el index.html trae la misma clave pública VAPID que se probó (87 caracteres)', () => {
+  const m = /VAPID_PUBLIC:\s*'([^']*)'/.exec(html);
+  assert.ok(m, 'falta CFG.VAPID_PUBLIC');
+  assert.equal(m[1].length, 87);
+  assert.ok(m[1].startsWith('B'));
+});
+
+test('F: cuerpoSuscripcion solo deja los campos que permiten las reglas de pushSubs', () => {
+  const ok = { endpoint: 'https://push.example/x', expirationTime: null, keys: { p256dh: 'a', auth: 'b', extra: 'z' }, otro: 1 };
+  assert.deepEqual(C.cuerpoSuscripcion(ok), { endpoint: 'https://push.example/x', keys: { p256dh: 'a', auth: 'b' } });
+  assert.deepEqual(C.cuerpoSuscripcion(Object.assign({}, ok, { expirationTime: 1800000000000 })).expirationTime, 1800000000000);
+  assert.equal(C.cuerpoSuscripcion(null), null);
+  assert.equal(C.cuerpoSuscripcion({ endpoint: 'https://x' }), null);
+  assert.equal(C.cuerpoSuscripcion({ endpoint: 'h'.repeat(1001), keys: { p256dh: 'a', auth: 'b' } }), null);
+  assert.equal(C.cuerpoSuscripcion({ endpoint: 'https://x', keys: { p256dh: 'a'.repeat(201), auth: 'b' } }), null);
+});
+
+test('F: estadoAvisos combina soporte, permiso y suscripción', () => {
+  assert.equal(C.estadoAvisos(false, 'default', false), 'nosoportado');
+  assert.equal(C.estadoAvisos(true, 'denied', true), 'bloqueado');
+  assert.equal(C.estadoAvisos(true, 'granted', true), 'activado');
+  assert.equal(C.estadoAvisos(true, 'granted', false), 'desactivado');
+  assert.equal(C.estadoAvisos(true, 'default', true), 'desactivado');
+});
+
+test('F: hayAccionEnCola solo con pendientes vigentes (no caducadas ni resueltas)', () => {
+  const ahora = 1800000000000;
+  const a = (estado, ts) => ({ tipo: 'reset', uid: 'u1', estado, ts });
+  assert.equal(C.hayAccionEnCola({ x: a('pendiente', ahora - 1000) }, ahora), true);
+  assert.equal(C.hayAccionEnCola({ x: a('ok', ahora - 1000) }, ahora), false);
+  assert.equal(C.hayAccionEnCola({ x: a('pendiente', ahora - 25 * 3600 * 1000) }, ahora), false);
+  assert.equal(C.hayAccionEnCola({}, ahora), false);
+  assert.equal(C.hayAccionEnCola(null, ahora), false);
+});
+
+test('F: debeRecargar respeta el intervalo mínimo', () => {
+  assert.equal(C.debeRecargar(null, 100000, 60000), true);
+  assert.equal(C.debeRecargar(100000, 120000, 60000), false);
+  assert.equal(C.debeRecargar(100000, 160000, 60000), true);
+});
