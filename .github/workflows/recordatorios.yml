@@ -1,0 +1,39 @@
+name: Enviar recordatorios push
+
+# Lo dispara el cron externo (cron-job.org) vía workflow_dispatch, cada 15 minutos.
+# Recordatorio por Jornada (2 h antes del primer partido) y aviso al admin por pendientes nuevos.
+# Sin nada por avisar termina en segundos.
+on:
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Solo mostrar qué haría (no envía ni escribe)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recordatorios
+  cancel-in-progress: false
+
+jobs:
+  recordatorios:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Pruebas de lógica
+        run: npm test
+      - name: Enviar avisos
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          VAPID_PUBLIC: ${{ secrets.VAPID_PUBLIC }}
+          VAPID_PRIVATE: ${{ secrets.VAPID_PRIVATE }}
+        run: node scripts/enviar-recordatorios.js ${{ inputs.dry && '--dry' || '' }}
