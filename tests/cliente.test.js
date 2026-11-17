@@ -488,3 +488,80 @@ test('E3a: la leyenda del nick avisa de espacios y coincide con la regla real', 
   assert.equal(C.validarNick('Juan Perez') === null, false);   // con espacio: inválido
   assert.equal(C.validarNick('Juan_Perez'), null);
 });
+
+/* ---------- Fase E3b: acciones del admin (cola adminAcciones) ---------- */
+const AHORA = 1800000000000;
+test('E3b: cuerpoAccion trae exactamente tipo, uid, estado y ts (lo que exigen las reglas)', () => {
+  assert.deepEqual(C.cuerpoAccion('reset', 'u1', 123), { tipo: 'reset', uid: 'u1', estado: 'pendiente', ts: 123 });
+  assert.deepEqual(Object.keys(C.cuerpoAccion('eliminar', 'u1', 5)).sort(), ['estado', 'tipo', 'ts', 'uid']);
+});
+
+test('E3b: idAccion es alfanumérico, empieza con a y limpia el sufijo', () => {
+  const id = C.idAccion(AHORA, 'k3-9_x!zz12345');
+  assert.match(id, /^a[a-z0-9]+$/);
+  assert.equal(C.idAccion(1, ''), 'a1');
+  assert.notEqual(C.idAccion(AHORA, 'aaa'), C.idAccion(AHORA, 'bbb'));
+});
+
+test('E3b: hayAccionPendiente — solo pendientes vigentes del mismo tipo y uid', () => {
+  const ac = {
+    a1: { tipo: 'reset', uid: 'u1', estado: 'pendiente', ts: AHORA - 1000 },
+    a2: { tipo: 'eliminar', uid: 'u2', estado: 'ok', ts: AHORA - 1000 },
+    a3: { tipo: 'eliminar', uid: 'u3', estado: 'pendiente', ts: AHORA - 25 * 3600 * 1000 },   // caducada
+    a4: { tipo: 'raro', uid: 'u4', estado: 'pendiente', ts: AHORA }
+  };
+  assert.equal(C.hayAccionPendiente(ac, 'reset', 'u1', AHORA), true);
+  assert.equal(C.hayAccionPendiente(ac, 'eliminar', 'u1', AHORA), false);   // otro tipo
+  assert.equal(C.hayAccionPendiente(ac, 'eliminar', 'u2', AHORA), false);   // ya resuelta
+  assert.equal(C.hayAccionPendiente(ac, 'eliminar', 'u3', AHORA), false);   // caducó: ya no bloquea
+  assert.equal(C.hayAccionPendiente(null, 'reset', 'u1', AHORA), false);
+});
+
+test('E3b: filasAcciones — recientes primero, inválidas fuera, nick o final del uid, tope n', () => {
+  const ac = {
+    a1: { tipo: 'reset', uid: 'uidAAAA1111', estado: 'ok', ts: 100 },
+    a2: { tipo: 'eliminar', uid: 'uidBBBB2222', estado: 'error', ts: 300, detalle: 'Caducada' },
+    a3: { tipo: 'x', uid: 'u', estado: 'ok', ts: 400 },
+    a4: { tipo: 'eliminar', uid: 'uidAAAA1111', estado: 'pendiente', ts: 200 }
+  };
+  const f = C.filasAcciones(ac, { uidAAAA1111: 'Memo' }, 10);
+  assert.deepEqual(f.map((x) => x.id), ['a2', 'a4', 'a1']);
+  assert.equal(f[0].quien, 'uid …2222');
+  assert.equal(f[0].detalle, 'Caducada');
+  assert.equal(f[1].quien, 'Memo');
+  assert.equal(f[1].estadoEtq, 'En cola');
+  assert.equal(f[2].etiqueta, 'Restablecer contraseña');
+  assert.equal(C.filasAcciones(ac, {}, 1).length, 1);
+  assert.deepEqual(C.filasAcciones(null, null, 5), []);
+});
+
+test('E3b: uidsEliminados solo incluye «eliminar» ya hechos', () => {
+  const ac = {
+    a1: { tipo: 'eliminar', uid: 'u1', estado: 'ok', ts: 1 },
+    a2: { tipo: 'eliminar', uid: 'u2', estado: 'pendiente', ts: 2 },
+    a3: { tipo: 'eliminar', uid: 'u3', estado: 'error', ts: 3 },
+    a4: { tipo: 'reset', uid: 'u4', estado: 'ok', ts: 4 }
+  };
+  assert.deepEqual(Object.keys(C.uidsEliminados(ac)), ['u1']);
+});
+
+test('E3b: puedeEliminarUsuario — nunca la propia cuenta ni un uid vacío', () => {
+  assert.equal(C.puedeEliminarUsuario('u1', 'yo'), true);
+  assert.equal(C.puedeEliminarUsuario('yo', 'yo'), false);
+  assert.equal(C.puedeEliminarUsuario('', 'yo'), false);
+});
+
+test('E3b: accionConfirmada — eliminar exige el nick (sin distinguir mayúsculas); reset no', () => {
+  assert.equal(C.accionConfirmada('eliminar', 'Memo_10', ''), false);
+  assert.equal(C.accionConfirmada('eliminar', 'Memo_10', 'otro'), false);
+  assert.equal(C.accionConfirmada('eliminar', 'Memo_10', '  memo_10 '), true);
+  assert.equal(C.accionConfirmada('reset', 'Memo_10', ''), true);
+});
+
+test('E3b: textos de confirmación nombran al usuario y avisan que eliminar no se deshace', () => {
+  assert.match(C.textoConfirmaAccion('eliminar', 'Memo'), /Memo.*No se puede deshacer/);
+  assert.match(C.textoConfirmaAccion('reset', 'Memo'), /correo para restablecer/);
+  assert.equal(C.etiquetaAccion('eliminar'), 'Eliminar usuario');
+  assert.equal(C.etiquetaEstadoAccion('ok'), 'Hecho');
+  assert.equal(C.etiquetaEstadoAccion('error'), 'Error');
+});
