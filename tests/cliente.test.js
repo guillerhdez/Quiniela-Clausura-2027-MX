@@ -657,7 +657,7 @@ test('G: filasSolicitudesBorrado ordena por antigüedad, marca vencidas y tolera
   assert.equal(f[0].nick, 'Beto');
   assert.equal(f[0].vencida, true);
   assert.equal(f[1].vencida, false); // exactamente 48 h aún está en plazo
-  assert.equal(f[2].nick, 'uid …ueva'); // sin nick: final del uid
+  assert.equal(f[2].nick, 'uid ueva'); // sin nick: final del uid, sin «…» para poder teclearlo al confirmar
   assert.equal(f[2].vencida, false);
   assert.deepEqual(C.filasSolicitudesBorrado(null, null, ahora), []);
   assert.deepEqual(C.filasSolicitudesBorrado({}, {}, ahora), []);
