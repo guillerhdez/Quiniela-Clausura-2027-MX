@@ -38,6 +38,7 @@ const base = () => ({
   nicks: { juan_perez: 'u1', jefe: 'adm' },
   predicciones: { u1: { p1: { gl: 1, gv: 0 } } },
   referidos: { u1: { por: 'adm' } },
+  solicitudesBorrado: { u1: { ts: AHORA - 5000 } },
   tabla: { u1: { nick: 'Juan_Perez' } },
   tablaMeta: { jornada: 3, version: 7, huella: 'abc' },
   adminAcciones: {
@@ -52,7 +53,7 @@ test('eliminar: purga rutas, borra Auth, invalida huella y marca ok', async () =
   const r = await ejecutar({ db, auth, fetchFn: async () => { throw new Error('no debe llamarse'); }, key: KEY, ahora: AHORA, log: (t) => logs.push(t) });
   assert.equal(r.procesadas, 1); assert.equal(r.hayErrores, false);
   assert.deepEqual(auth.borrados, ['u1']);
-  for (const ruta of ['usuarios/u1', 'nicks/juan_perez', 'predicciones/u1', 'referidos/u1', 'tabla/u1']) assert.equal((await db.ref(ruta).get()).val(), null, ruta);
+  for (const ruta of ['usuarios/u1', 'nicks/juan_perez', 'predicciones/u1', 'referidos/u1', 'solicitudesBorrado/u1', 'tabla/u1']) assert.equal((await db.ref(ruta).get()).val(), null, ruta);
   assert.equal((await db.ref('usuarios/adm').get()).val().nick, 'Jefe');
   assert.equal((await db.ref('tablaMeta/huella').get()).val(), null);
   assert.equal((await db.ref('tablaMeta/version').get()).val(), 7);

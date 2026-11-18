@@ -45,8 +45,8 @@ async function main() {
   try {
     const db = getDatabase(app);
     const leer = async (ruta) => (await db.ref(ruta).get()).val();
-    const [partidos, resultados, notificado, subs, admins, pend, pendCal] = await Promise.all([
-      leer('partidos'), leer('resultados'), leer('notificado'), leer('pushSubs'), leer('admins'), leer('pendientes'), leer('pendientesPartidos'),
+    const [partidos, resultados, notificado, subs, admins, pend, pendCal, solicBorrado] = await Promise.all([
+      leer('partidos'), leer('resultados'), leer('notificado'), leer('pushSubs'), leer('admins'), leer('pendientes'), leer('pendientesPartidos'), leer('solicitudesBorrado'),
     ]);
     const ahora = Date.now();
     const subsTodas = subs || {};
@@ -67,9 +67,9 @@ async function main() {
       if (!DRY && r.enviados > 0) actualizaciones['notificado/' + aviso.marca] = ahora;
     }
 
-    // 2) Aviso al admin por pendientes nuevos o cambiados
+    // 2) Aviso al admin por pendientes nuevos o cambiados (resultados, calendario y solicitudes de eliminación de cuenta)
     const previo = (notificado && notificado.admin) || {};
-    const { nuevos, vistos } = R.pendientesPorAvisar(pend, pendCal, previo);
+    const { nuevos, vistos } = R.pendientesPorAvisar(pend, pendCal, previo, solicBorrado);
     const subsAdmin = {};
     for (const uid of Object.keys(admins || {})) if (admins[uid] === true && subsTodas[uid]) subsAdmin[uid] = subsTodas[uid];
     if (nuevos.length) {

@@ -50,7 +50,7 @@ test('planEliminar: purga todas las rutas del uid y libera su nick', () => {
   assert.equal(p.ok, true);
   assert.equal(p.borrarAuth, true);
   assert.deepEqual(Object.keys(p.rutas).sort(), [
-    'historial/u1', 'nicks/juan_perez', 'predicciones/u1', 'pushSubs/u1', 'referidos/u1', 'tabla/u1', 'usuarios/u1',
+    'historial/u1', 'nicks/juan_perez', 'predicciones/u1', 'pushSubs/u1', 'referidos/u1', 'solicitudesBorrado/u1', 'tabla/u1', 'usuarios/u1',
   ]);
   assert.ok(Object.values(p.rutas).every((v) => v === null));
 });

@@ -71,6 +71,25 @@ test('mensajeAdmin cuenta cada tipo en singular y plural', () => {
   assert.match(m.cuerpo, /1 resultado y 2 partidos del calendario/);
 });
 
+test('pendientesPorAvisar incluye solicitudes de borrado y no re-avisa la misma', () => {
+  const sol = { uA: { ts: 1700000000001 } };
+  const a = R.pendientesPorAvisar(null, null, {}, sol);
+  assert.strictEqual(a.nuevos.length, 1);
+  assert.strictEqual(a.nuevos[0].tipo, 'sol');
+  const b = R.pendientesPorAvisar(null, null, a.vistos, sol);
+  assert.strictEqual(b.nuevos.length, 0);
+  const c = R.pendientesPorAvisar(null, null, a.vistos, null);
+  assert.strictEqual(c.nuevos.length, 0);
+  assert.deepStrictEqual(c.vistos, {});
+});
+
+test('mensajeAdmin con solicitudes: singular, plural y tres tipos, sin nicks ni uids', () => {
+  assert.match(R.mensajeAdmin([{ tipo: 'sol' }]).cuerpo, /^1 solicitud de eliminación de cuenta por revisar en Admin\.$/);
+  assert.match(R.mensajeAdmin([{ tipo: 'sol' }, { tipo: 'sol' }]).cuerpo, /^2 solicitudes de eliminación de cuenta/);
+  assert.match(R.mensajeAdmin([{ tipo: 'res' }, { tipo: 'cal' }, { tipo: 'sol' }]).cuerpo,
+    /^1 resultado, 1 partido del calendario y 1 solicitud de eliminación de cuenta por revisar en Admin\.$/);
+});
+
 test('suscripcionValida exige endpoint https y claves', () => {
   const ok = { endpoint: 'https://push.example/abc', keys: { p256dh: 'a', auth: 'b' } };
   assert.ok(R.suscripcionValida(ok));
