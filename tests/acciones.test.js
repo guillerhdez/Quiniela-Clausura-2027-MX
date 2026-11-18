@@ -45,6 +45,17 @@ test('planEliminar: uid inexistente en Auth y sin perfil', () => {
   assert.deepEqual(p, { ok: false, detalle: 'uid inexistente' });
 });
 
+test('planEliminar: sin cuenta ni perfil pero con solicitud pendiente, limpia los restos', () => {
+  const p = A.planEliminar({ uid: 'u1', esAdmin: false, usuario: null, nickDueno: null, existeEnAuth: false, solicitud: { ts: 1800000000000 } });
+  assert.equal(p.ok, true);
+  assert.equal(p.soloRestos, true);
+  assert.equal(p.borrarAuth, false);
+  assert.equal(p.rutas['solicitudesBorrado/u1'], null);
+  assert.equal(Object.keys(p.rutas).some((r) => r.startsWith('nicks/')), false);
+  // una solicitud mal formada (no objeto) no cuenta
+  assert.deepEqual(A.planEliminar({ uid: 'u1', esAdmin: false, usuario: null, nickDueno: null, existeEnAuth: false, solicitud: true }), { ok: false, detalle: 'uid inexistente' });
+});
+
 test('planEliminar: purga todas las rutas del uid y libera su nick', () => {
   const p = A.planEliminar({ uid: 'u1', esAdmin: false, usuario: { nick: 'Juan_Perez' }, nickDueno: 'u1', existeEnAuth: true });
   assert.equal(p.ok, true);

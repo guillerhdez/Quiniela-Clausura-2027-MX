@@ -86,6 +86,20 @@ test('eliminar uid inexistente y acción ya procesada no se repite', async () =>
   assert.equal((await db.ref('usuarios/u1/nick').get()).val(), 'Juan_Perez');
 });
 
+test('eliminar: cuenta ya inexistente con solicitud huérfana: limpia los restos y queda ok', async () => {
+  const datos = base();
+  datos.solicitudesBorrado = Object.assign({}, datos.solicitudesBorrado, { fantasma: { ts: 1800000000000 } });
+  datos.adminAcciones = { a1: { tipo: 'eliminar', uid: 'fantasma', estado: 'pendiente', ts: AHORA - 10 } };
+  const db = baseFalsa(datos), auth = authFalso({ u1: { email: 'a@b.com' } });
+  const r = await ejecutar({ db, auth, fetchFn: null, key: KEY, ahora: AHORA });
+  assert.equal(r.procesadas, 1);
+  assert.deepEqual(auth.borrados, []);
+  assert.equal((await db.ref('adminAcciones/a1/estado').get()).val(), 'ok');
+  assert.match((await db.ref('adminAcciones/a1/detalle').get()).val(), /restos/);
+  assert.equal((await db.ref('solicitudesBorrado/fantasma').get()).val(), null);
+  assert.equal((await db.ref('usuarios/u1/nick').get()).val(), 'Juan_Perez');
+});
+
 test('eliminar: si Auth ya no tiene la cuenta pero el perfil sí, igual se purga', async () => {
   const db = baseFalsa(base()), auth = authFalso({});
   const r = await ejecutar({ db, auth, fetchFn: null, key: KEY, ahora: AHORA });
