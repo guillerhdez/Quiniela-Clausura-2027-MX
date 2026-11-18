@@ -615,3 +615,50 @@ test('F: debeRecargar respeta el intervalo mínimo', () => {
   assert.equal(C.debeRecargar(100000, 120000, 60000), false);
   assert.equal(C.debeRecargar(100000, 160000, 60000), true);
 });
+
+/* ---------- Fase G: borrado de cuenta pedido por el usuario ---------- */
+test('G: cuerpoSolicitudBorrado es exactamente {ts: servidor} y la leyenda cita el plazo', () => {
+  assert.deepEqual(C.cuerpoSolicitudBorrado(), { ts: { '.sv': 'timestamp' } });
+  assert.equal(C.PLAZO_BORRADO_DIAS, 2);
+  assert.ok(C.LEYENDA_BORRADO.includes('2 días'));
+  assert.ok(C.LEYENDA_BORRADO.includes('pronósticos'));
+  assert.ok(C.LEYENDA_BORRADO.includes('tabla general'));
+});
+
+test('G: solicitudBorradoTs solo acepta objeto con ts numérico', () => {
+  assert.equal(C.solicitudBorradoTs({ ts: 1800000000000 }), 1800000000000);
+  assert.equal(C.solicitudBorradoTs({ ts: '1800000000000' }), null);
+  assert.equal(C.solicitudBorradoTs({ ts: NaN }), null);
+  assert.equal(C.solicitudBorradoTs({}), null);
+  assert.equal(C.solicitudBorradoTs(null), null);
+  assert.equal(C.solicitudBorradoTs(5), null);
+});
+
+test('G: textoAntiguedad en horas y días', () => {
+  const t = 1800000000000, H = 3600000;
+  assert.equal(C.textoAntiguedad(t, t + 30 * 60000), 'hace menos de 1 h');
+  assert.equal(C.textoAntiguedad(t, t + 5 * H), 'hace 5 h');
+  assert.equal(C.textoAntiguedad(t, t + 47 * H), 'hace 47 h');
+  assert.equal(C.textoAntiguedad(t, t + 72 * H), 'hace 3 d');
+  assert.equal(C.textoAntiguedad(t, t - H), 'hace menos de 1 h'); // reloj adelantado
+});
+
+test('G: filasSolicitudesBorrado ordena por antigüedad, marca vencidas y tolera basura', () => {
+  const ahora = 1800000000000, H = 3600000;
+  const sol = {
+    uNueva: { ts: ahora - 2 * H },
+    uVieja: { ts: ahora - 60 * H },
+    uLimite: { ts: ahora - 48 * H },
+    uMala: { ts: 'x' },
+    uNula: null
+  };
+  const f = C.filasSolicitudesBorrado(sol, { uVieja: 'Beto', uNueva: '' }, ahora);
+  assert.deepEqual(f.map((x) => x.uid), ['uVieja', 'uLimite', 'uNueva']);
+  assert.equal(f[0].nick, 'Beto');
+  assert.equal(f[0].vencida, true);
+  assert.equal(f[1].vencida, false); // exactamente 48 h aún está en plazo
+  assert.equal(f[2].nick, 'uid …ueva'); // sin nick: final del uid
+  assert.equal(f[2].vencida, false);
+  assert.deepEqual(C.filasSolicitudesBorrado(null, null, ahora), []);
+  assert.deepEqual(C.filasSolicitudesBorrado({}, {}, ahora), []);
+});
