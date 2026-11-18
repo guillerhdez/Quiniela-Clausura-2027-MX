@@ -1,0 +1,43 @@
+name: Probar Liguilla de una temporada pasada (E2c-0)
+
+# Solo lectura (TheSportsDB y ESPN). Sin secrets ni escritura. Se lanza a mano.
+# Objetivo: ver cómo numeran y nombran las fuentes las rondas de Liguilla y qué estado traen los partidos terminados.
+on:
+  workflow_dispatch:
+    inputs:
+      temporada:
+        description: 'Temporada de TheSportsDB (ya terminada)'
+        type: string
+        default: '2025-2026'
+      rondas:
+        description: 'Rondas de TheSportsDB separadas por coma'
+        type: string
+        default: '17,18,19,20,21,22,23,24,25,26,27,28,29,30,125,150,175,200'
+      espn_desde:
+        description: 'ESPN: primer día (AAAAMMDD)'
+        type: string
+        default: '20260425'
+      espn_hasta:
+        description: 'ESPN: último día (AAAAMMDD)'
+        type: string
+        default: '20260531'
+
+permissions:
+  contents: read
+
+jobs:
+  probar:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Consultar fuentes
+        env:
+          TEMP_SDB: ${{ inputs.temporada }}
+          RONDAS: ${{ inputs.rondas }}
+          ESPN_DESDE: ${{ inputs.espn_desde }}
+          ESPN_HASTA: ${{ inputs.espn_hasta }}
+        run: node scripts/probar-liguilla-pasada.js
